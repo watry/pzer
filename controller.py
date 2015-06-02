@@ -5,6 +5,7 @@ import threading
 import queue
 
 import protocols
+import ptp
 
 name = "aaa"
 
@@ -139,7 +140,7 @@ class Device(DataModel):
         self._processer_alive      = threading.Event()
         self.procThread = threading.Thread(target=self._processer)
 
-        self.protocolstack = protocols.Phy()
+        self.protocolstack = protocols.Protocol()
 
 
 
