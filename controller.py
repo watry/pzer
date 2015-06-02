@@ -45,7 +45,7 @@ class Capture(DataModel):
 
         self.RecvBuffer = Buffer
 
-        self.alive      = threading.Event()
+        self._processer_alive      = threading.Event()
         self.running    = threading.Event()
 
         self.CapThread = threading.Thread(target=self.cap)
@@ -53,12 +53,12 @@ class Capture(DataModel):
 
     def start(self):
         self.running.set()
-        self.alive.set()
+        self._processer_alive.set()
         self.CapThread.start()
         #self.DistThread.start()
 
     def terminate(self):
-        self.alive.clear()
+        self._processer_alive.clear()
         self.running.set()  # break wait_loop
         self.CapThread.join()
         #self.DistThread.join()
@@ -96,7 +96,7 @@ class Capture(DataModel):
             )
         pcap_freecode(fcode)
 
-        while self.alive.isSet():
+        while self._processer_alive.isSet():
             self.running.wait()
             if(pcap_next_ex(
                 adhandle,
@@ -104,30 +104,23 @@ class Capture(DataModel):
                 byref(packet_data),
                 )==1 
                 and header_data!=None):
-                try:
 
-                    content = []
-                    for x in packet_data[:header_data.contents.len]:
-                        content.append(x)
+                content = []
+                for x in packet_data[:header_data.contents.len]:
+                    content.append(x)
 
-                    pktdata = {
-                        'port':self,
-                        'time':[header_data.contents.ts.tv_sec, header_data.contents.ts.tv_usec],
-                        'content':content
-                        }
+                pktdata = {
+                    'port':self,
+                    'time':[header_data.contents.ts.tv_sec, header_data.contents.ts.tv_usec],
+                    'content':content,
+                    'offset':0,
+                    }
 
-                    self.RecvBuffer.put_nowait([pktdata])
-                except QueueFull:
-                    pass
+                self.RecvBuffer.put_nowait(pktdata)
+                #except QueueFull:
+                #    pass
 
         pcap_close(adhandle)
-
-    #def dist(self):
-    #    isFilled = False
-    #    while self.alive.isSet():
-    #        if not self.RecvBuffer.empty():
-    #            t = self.RecvBuffer.get(False)
-    #            self._output(t)
 
 
 class Device(DataModel):
@@ -141,68 +134,31 @@ class Device(DataModel):
         
 
         self.RecvBuffer = queue.Queue()
-        self.alive      = threading.Event()
-
-        self.procThread = threading.Thread(target=self._processer)
         self.cap  = Capture(para['capture'], self.RecvBuffer)
 
-        self.supportProtocols = {
-            'eth':protocols.ethernet,
-            'bare':protocols.bare,
-        }
-        self.protocols = {}
-        self.protocolsDaemon = {}
+        self._processer_alive      = threading.Event()
+        self.procThread = threading.Thread(target=self._processer)
+
+        self.protocolstack = protocols.Phy()
 
 
 
     def _processer(self):
-        while self.alive.isSet():
+        while self._processer_alive.isSet():
             if not self.RecvBuffer.empty():
-                t = self.RecvBuffer.get(False)
-                self._decode(t,self.protocolsDaemon)
-
-    def _decode(self, pkt, proto):
-        for x in proto:
-            if x.accept(each_item):
-                x.issue(each_item)
-                for each_item in x.digest(each_item):
-                    self._decode(each_item, protocolsDaemon[proto])
-
-                break
-
-    #def _queryProt(self, base, index):
-    #    pp = self.protocolsDaemon
-    #    p = self.protocols
-    #    for x in base:
-    #        pp = pp[p[x]]
-    #        p = p[x]
-#
-#
-    #    return pp[index]
-
+                t = self.RecvBuffer.get(False)  
+                self.protocolstack.archive(t)
 
 
     def start(self):
-        self.alive.set()
+        self._processer_alive.set()
         self.procThread.start()
         self.cap.start()
 
     def terminate(self):
-        self.alive.clear()
+        self._processer_alive.clear()
         self.cap.terminate()
         self.procThread = threading.Thread(target=self._processer)
-
-    def addProtocol(self, base, name, typ, cfg):
-        pp = self.protocolsDaemon
-        p = self.protocols
-        for x in base:
-            pp = pp[p[x]]
-            p = p[x]
-
-        p[name] = {}
-        new_proto = self.supportProtocols[typ](cfg)
-        pp[new_proto] = {}
-
 
 
 

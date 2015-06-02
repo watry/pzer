@@ -12,18 +12,12 @@ p = {
 
 
 c = Device(p)
-c.addProtocol(
-	base = [],
-	name = 'eth1',
-	typ = 'eth',
-	cfg = {}
-	)
-c.addProtocol(
-	base = ['eth1'],
-	name = 'bare1',
-	typ = 'bare',
-	cfg = {}
-	)
+
+c.protocolstack.add("e1", None, "ethernet", 	)
+c.protocolstack.add("ip1",0x0800,"ip", 		[ "e1"])
+c.protocolstack.add("b1", None,"bare", 		[ "e1", "ip1"])
+c.protocolstack.add("b2", None,"bare", 		[ "e1"])
+
 c.start()
 time.sleep(3)
 c.terminate()
